@@ -1,45 +1,72 @@
-from typing import Any, Dict, List
-
-import tweepy
-
-from src.connection import trends_collection
-from src.constants import BRAZIL_WOE_ID
-from src.secrets import ACCESS_TOKEN, ACCESS_TOKEN_SECRET, CONSUMER_KEY, CONSUMER_SECRET
+import json
+import os
+from requests_oauthlib import OAuth1Session
 
 
-def _get_trends(woe_id: int, api: tweepy.API) -> List[Dict[str, Any]]:
-    """Get treending topics from Twitter API.
+def get_info_me():
 
-    Args:
-        woe_id (int): Identifier of location.
+    consumer_key = os.getenv("CONSUMER_KEY")
+    consumer_secret = os.getenv("CONSUMER_SECRET")
 
-    Returns:
-        List[Dict[str, Any]]: Trends list.
-    """
-    trends = api.trends_place(woe_id)
+    # User fields are adjustable, options include:
+    # created_at, description, entities, id, location, name,
+    # pinned_tweet_id, profile_image_url, protected,
+    # public_metrics, url, username, verified, and withheld
+    fields = "created_at,description"
+    params = {"user.fields": fields}
 
-    return trends[0]["trends"]
+    # Get request token
+    request_token_url = "https://api.twitter.com/oauth/request_token"
+    oauth = OAuth1Session(consumer_key, client_secret=consumer_secret)
 
+    try:
+        fetch_response = oauth.fetch_request_token(request_token_url)
+    except ValueError:
+        print(
+            "There may have been an issue with the consumer_key or consumer_secret you entered."
+        )
 
-def get_trends() -> List[Dict[str, Any]]:
-    """Get treending topics persisted in MongoDB.
+    resource_owner_key = fetch_response.get("oauth_token")
+    resource_owner_secret = fetch_response.get("oauth_token_secret")
+    print("Got OAuth token: %s" % resource_owner_key)
 
-    Args:
-        woe_id (int): Identifier of location.
+    # # Get authorization
+    base_authorization_url = "https://api.twitter.com/oauth/authorize"
+    authorization_url = oauth.authorization_url(base_authorization_url)
+    print("Please go here and authorize: %s" % authorization_url)
+    verifier = input("Paste the PIN here: ")
 
-    Returns:
-        List[Dict[str, Any]]: Trends list.
-    """
-    trends = trends_collection.find({})
-    return list(trends)
+    # Get the access token
+    access_token_url = "https://api.twitter.com/oauth/access_token"
+    oauth = OAuth1Session(
+        consumer_key,
+        client_secret=consumer_secret,
+        resource_owner_key=resource_owner_key,
+        resource_owner_secret=resource_owner_secret,
+        verifier=verifier,
+    )
+    oauth_tokens = oauth.fetch_access_token(access_token_url)
 
+    access_token = oauth_tokens["oauth_token"]
+    access_token_secret = oauth_tokens["oauth_token_secret"]
 
-def save_trends() -> None:
-    """Get trends topics and save on MongoDB."""
-    auth = tweepy.OAuthHandler(consumer_key=CONSUMER_KEY, consumer_secret=CONSUMER_SECRET)
-    auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+    # Make the request
+    oauth = OAuth1Session(
+        consumer_key,
+        client_secret=consumer_secret,
+        resource_owner_key=access_token,
+        resource_owner_secret=access_token_secret,
+    )
 
-    api = tweepy.API(auth)
+    response = oauth.get("https://api.twitter.com/2/users/me", params=params)
 
-    trends = _get_trends(woe_id=BRAZIL_WOE_ID, api=api)
-    trends_collection.insert_many(trends)
+    if response.status_code != 200:
+        raise Exception(
+            "Request returned an error: {} {}".format(response.status_code, response.text)
+        )
+
+    print("Response code: {}".format(response.status_code))
+
+    json_response = response.json()
+
+    print(json.dumps(json_response, indent=4, sort_keys=True))

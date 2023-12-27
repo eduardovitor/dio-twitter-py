@@ -2,14 +2,10 @@
 name = "mongo-test"
 version = "0.1.0"
 description = ""
-authors = ["Guilherme Carvalho <guilherme.carvalho-ext@viavarejo.com.br>"]
+authors = ["Eduardo Vitor"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-fastapi = "^0.68.1"
-pymongo = "^3.12.0"
-tweepy = "^3.10.0"
-uvicorn = {extras = ["standard"], version = "^0.15.0"}
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
